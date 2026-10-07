@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', -apple-system, sans-serif; background: transparent; padding: 16px; }
+  h2.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+
+  .pipeline { display: flex; flex-direction: column; gap: 0; width: 100%; max-width: 900px; margin: 0 auto; }
+
+  /* Phase labels */
+  .phase-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--text-muted, #888);
+    padding: 4px 0 4px 2px;
+    margin-top: 8px;
+  }
+
+  /* Arrow */
+  .arrow {
+    display: flex; justify-content: center; align-items: center;
+    height: 24px; color: var(--text-muted, #999); font-size: 18px;
+  }
+
+  /* Row */
+  .row { display: flex; gap: 12px; justify-content: center; }
+
+  /* Node base */
+  .node {
+    border-radius: 8px;
+    padding: 10px 14px;
+    display: flex; flex-direction: column; gap: 3px;
+    min-width: 140px;
+    flex: 1;
+    max-width: 200px;
+    border: 1.5px solid;
+    position: relative;
+  }
+  .node .node-icon { font-size: 16px; margin-bottom: 2px; }
+  .node .node-title { font-size: 12px; font-weight: 700; line-height: 1.2; }
+  .node .node-sub { font-size: 10px; opacity: 0.7; line-height: 1.3; margin-top: 2px; }
+  .node .node-tag {
+    position: absolute; top: -8px; right: 8px;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+    padding: 2px 6px; border-radius: 10px;
+  }
+
+  /* Wide node */
+  .node-wide { max-width: 100%; flex: 1; }
+
+  /* Color schemes */
+  .c-blue { background: #EFF6FF; border-color: #93C5FD; color: #1E3A5F; }
+  .c-blue .node-tag { background: #3B82F6; color: #fff; }
+
+  .c-orange { background: #FFF7ED; border-color: #FDBA74; color: #7C2D12; }
+  .c-orange .node-tag { background: #F97316; color: #fff; }
+
+  .c-purple { background: #F5F3FF; border-color: #C4B5FD; color: #4C1D95; }
+  .c-purple .node-tag { background: #7C3AED; color: #fff; }
+
+  .c-green { background: #F0FDF4; border-color: #86EFAC; color: #14532D; }
+  .c-green .node-tag { background: #16A34A; color: #fff; }
+
+  .c-teal { background: #F0FDFA; border-color: #5EEAD4; color: #134E4A; }
+  .c-teal .node-tag { background: #0D9488; color: #fff; }
+
+  .c-red { background: #FFF1F2; border-color: #FCA5A5; color: #881337; }
+  .c-red .node-tag { background: #E11D48; color: #fff; }
+
+  .c-gray { background: #F8FAFC; border-color: #CBD5E1; color: #334155; }
+  .c-gray .node-tag { background: #64748B; color: #fff; }
+
+  /* Split section */
+  .split-container {
+    display: flex;
+    gap: 0;
+    border: 1.5px solid #CBD5E1;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .split-panel {
+    flex: 1;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .split-panel.left { background: #FFF7ED; border-right: 1.5px solid #CBD5E1; }
+  .split-panel.right { background: #F5F3FF; }
+
+  .split-label {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    text-align: center;
+    padding: 4px 8px;
+    border-radius: 6px;
+  }
+  .split-label.a { background: #FDBA74; color: #7C2D12; }
+  .split-label.b { background: #C4B5FD; color: #4C1D95; }
+
+  .mini-node {
+    background: #fff;
+    border-radius: 6px;
+    padding: 7px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    display: flex; align-items: center; gap: 6px;
+    border: 1px solid;
+  }
+  .mini-node.orange-b { border-color: #FDBA74; color: #7C2D12; }
+  .mini-node.purple-b { border-color: #C4B5FD; color: #4C1D95; }
+  .mini-node.shared { border-color: #CBD5E1; color: #334155; background: #F8FAFC; }
+
+  .mini-sub { font-size: 9.5px; font-weight: 400; opacity: 0.65; display: block; }
+
+  /* Eval section */
+  .eval-row {
+    display: flex; gap: 10px; align-items: stretch;
+  }
+  .eval-box {
+    flex: 1; border-radius: 8px; padding: 10px 12px;
+    border: 1.5px solid;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .eval-box .etitle { font-size: 11px; font-weight: 700; }
+  .eval-box .esub { font-size: 10px; opacity: 0.7; line-height: 1.4; }
+
+  .c-eval-a { background: #FFF7ED; border-color: #FDBA74; color: #7C2D12; }
+  .c-eval-b { background: #F5F3FF; border-color: #C4B5FD; color: #4C1D95; }
+  .c-eval-vs { background: #F8FAFC; border-color: #94A3B8; color: #334155; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; min-width: 36px; flex: 0; padding: 0 6px; }
+
+  /* Rerank section */
+  .rerank-box {
+    border: 1.5px dashed #16A34A;
+    border-radius: 8px;
+    padding: 10px 14px;
+    background: #F0FDF4;
+    display: flex; gap: 12px; align-items: center;
+  }
+  .rerank-inner { flex: 1; }
+  .rerank-title { font-size: 12px; font-weight: 700; color: #14532D; }
+  .rerank-sub { font-size: 10px; color: #166534; opacity: 0.8; margin-top: 3px; line-height: 1.4; }
+  .rerank-badge {
+    font-size: 9px; font-weight: 700; background: #16A34A; color: #fff;
+    padding: 3px 8px; border-radius: 10px; white-space: nowrap;
+  }
+
+  /* Final compare */
+  .compare-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  }
+  .compare-cell {
+    border-radius: 8px; padding: 10px 12px;
+    border: 1.5px solid;
+    font-size: 11px;
+  }
+  .compare-cell .ctitle { font-weight: 700; margin-bottom: 3px; font-size: 12px; }
+  .compare-cell .clist { padding-left: 12px; opacity: 0.8; line-height: 1.6; font-size: 10px; }
+  .c-compare-1 { background: #F0FDF4; border-color: #86EFAC; color: #14532D; }
+  .c-compare-2 { background: #EFF6FF; border-color: #93C5FD; color: #1E3A5F; }
+
+  /* Section divider */
+  .section-divider {
+    display: flex; align-items: center; gap: 8px; margin: 4px 0;
+  }
+  .section-divider span { font-size: 10px; font-weight: 700; color: #94A3B8; white-space: nowrap; letter-spacing: 0.8px; text-transform: uppercase; }
+  .section-divider::before, .section-divider::after {
+    content: ''; flex: 1; height: 1px; background: #E2E8F0;
+  }
+
+  /* Legend */
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 6px; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 10px; color: #64748B; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+  /* Step badges */
+  .step-badge {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: #334155; color: #fff;
+    font-size: 9px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .connector-line {
+    width: 100%; height: 1.5px;
+    background: linear-gradient(90deg, transparent, #94A3B8, transparent);
+    margin: 0;
+  }
+
+  .double-arrow {
+    display: flex; justify-content: center; align-items: center;
+    height: 28px; gap: 40%;
+    color: #94A3B8; font-size: 14px;
+  }
+</style>
+</head>
+<body>
+<h2 class="sr-only">Financial RAG Pipeline Architecture: End-to-end flow from data ingestion through chunking, embedding, retrieval, reranking, and generation.</h2>
+
+<div class="pipeline">
+
+  <!-- PHASE 1: DATA -->
+  <div class="phase-label">① Data Ingestion</div>
+  <div class="row">
+    <div class="node c-blue">
+      <div class="node-icon">🏛️</div>
+      <div class="node-title">SEC EDGAR</div>
+      <div class="node-sub">10-K, 10-Q filings via <code>sec-edgar-downloader</code></div>
+      <div class="node-tag">FREE</div>
+    </div>
+    <div class="node c-blue">
+      <div class="node-icon">📄</div>
+      <div class="node-title">Synthetic Docs</div>
+      <div class="node-sub">Auto-generated financial docs for controlled testing</div>
+      <div class="node-tag">FALLBACK</div>
+    </div>
+    <div class="node c-blue">
+      <div class="node-icon">🔧</div>
+      <div class="node-title">LangChain Loaders</div>
+      <div class="node-sub">PyPDFLoader, TextLoader — extracts text + metadata</div>
+      <div class="node-tag">PROCESS</div>
+    </div>
+  </div>
+
+  <div class="arrow">↓</div>
+
+  <!-- PHASE 2: CHUNKING SPLIT -->
+  <div class="phase-label">② Chunking Strategy — Two Parallel Paths</div>
+  <div class="split-container">
+    <div class="split-panel left">
+      <div class="split-label a">Path A — Fixed-Size Chunking</div>
+      <div class="mini-node orange-b">
+        <span>✂️</span>
+        <span>RecursiveCharacterTextSplitter<span class="mini-sub">chunk_size=512 · overlap=64 tokens</span></span>
+      </div>
+      <div class="mini-node orange-b">
+        <span>📌</span>
+        <span>Hard boundaries, uniform chunks<span class="mini-sub">Simple, fast, predictable</span></span>
+      </div>
+      <div class="mini-node orange-b">
+        <span>🗄️</span>
+        <span>Pinecone: namespace="fixed"<span class="mini-sub">Stores all fixed-size chunk vectors</span></span>
+      </div>
+    </div>
+    <div class="split-panel right">
+      <div class="split-label b">Path B — Semantic Chunking</div>
+      <div class="mini-node purple-b">
+        <span>🧠</span>
+        <span>LangChain SemanticChunker<span class="mini-sub">Splits on embedding distance breaks</span></span>
+      </div>
+      <div class="mini-node purple-b">
+        <span>📌</span>
+        <span>Topic-aware, variable-length chunks<span class="mini-sub">Respects meaning boundaries</span></span>
+      </div>
+      <div class="mini-node purple-b">
+        <span>🗄️</span>
+        <span>Pinecone: namespace="semantic"<span class="mini-sub">Stores all semantic chunk vectors</span></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">↓</div>
+
+  <!-- PHASE 3: EMBEDDING -->
+  <div class="phase-label">③ Embedding — Shared for Both Paths</div>
+  <div class="row">
+    <div class="node c-teal node-wide">
+      <div class="node-icon">🤗</div>
+      <div class="node-title">HuggingFace Embeddings — BAAI/bge-large-en-v1.5</div>
+      <div class="node-sub">768-dim dense vectors · finance-aware · free · runs locally via sentence-transformers</div>
+    </div>
+  </div>
+
+  <div class="arrow">↓</div>
+
+  <!-- PHASE 4: EVALUATION -->
+  <div class="phase-label">④ Retrieval Quality Evaluation — Pick the Best Chunking Strategy</div>
+  <div class="eval-row">
+    <div class="eval-box c-eval-a">
+      <div class="etitle">Fixed-Size Results</div>
+      <div class="esub">20 test queries → top-5 retrieval from Pinecone "fixed" → score with RAGAS (context precision, recall)</div>
+    </div>
+    <div class="c-eval-vs">VS</div>
+    <div class="eval-box c-eval-b">
+      <div class="etitle">Semantic Results</div>
+      <div class="esub">Same 20 queries → top-5 from "semantic" → RAGAS scores + MRR comparison</div>
+    </div>
+  </div>
+  <div style="margin-top:8px;">
+    <div class="node c-gray node-wide" style="max-width:100%; flex:1;">
+      <div class="node-title">🏆 Winner Selected — used in reranking phase below</div>
+      <div class="node-sub">Whichever strategy has higher context precision + recall moves forward (usually semantic wins on financial docs)</div>
+    </div>
+  </div>
+
+  <div class="arrow">↓</div>
+
+  <!-- PHASE 5: RERANKING -->
+  <div class="phase-label">⑤ Reranking Step — Applied to Winning Chunking Strategy</div>
+  <div class="row">
+    <div class="node c-gray" style="max-width:200px;">
+      <div class="node-icon">🔍</div>
+      <div class="node-title">Query → Pinecone</div>
+      <div class="node-sub">Retrieve top-20 candidates (wider net for reranker to work with)</div>
+    </div>
+    <div class="arrow" style="height:auto; align-items:center;">→</div>
+    <div class="rerank-box" style="flex:1;">
+      <div class="rerank-inner">
+        <div class="rerank-title">🔁 TypeSafe AI Jev Reranker</div>
+        <div class="rerank-sub">Jev System One via TypeSafe AI API<br>Typed relevance decisions for retrieved candidates · Python sorts by P(relevant) · returns top candidates</div>
+      </div>
+      <div class="rerank-badge">SYSTEM ONE · API</div>
+    </div>
+    <div class="arrow" style="height:auto; align-items:center;">→</div>
+    <div class="node c-green" style="max-width:200px;">
+      <div class="node-icon">📊</div>
+      <div class="node-title">Evaluate Reranked Pipeline</div>
+      <div class="node-sub">RAGAS · faithfulness · context precision · context recall</div>
+    </div>
+  </div>
+
+  <div class="arrow">↓</div>
+
+  <!-- PHASE 6: GENERATION -->
+  <div class="phase-label">⑥ Generation — Groq LLM</div>
+  <div class="row">
+    <div class="node c-purple">
+      <div class="node-icon">📝</div>
+      <div class="node-title">RAG Prompt Template</div>
+      <div class="node-sub">System + context chunks + user query assembled via LangChain LCEL chain</div>
+    </div>
+    <div class="node c-purple">
+      <div class="node-icon">⚡</div>
+      <div class="node-title">Groq LLM</div>
+      <div class="node-sub">llama-3.1-70b-versatile or mixtral-8x7b — ultra-fast inference via Groq API</div>
+    </div>
+    <div class="node c-purple">
+      <div class="node-icon">💬</div>
+      <div class="node-title">Structured Answer</div>
+      <div class="node-sub">Answer + source chunks + confidence shown in UI</div>
+    </div>
+  </div>
+
+  <div class="arrow">↓</div>
+
+  <!-- PHASE 7: STREAMLIT -->
+  <div class="phase-label">⑦ Streamlit App — Interactive Comparison Dashboard</div>
+  <div class="compare-grid">
+    <div class="compare-cell c-compare-1">
+      <div class="ctitle">🖥️ Query Interface</div>
+      <ul class="clist">
+        <li>Free-text question input</li>
+        <li>Strategy toggle: Fixed / Semantic</li>
+        <li>Reranker on/off toggle</li>
+        <li>Answer + retrieved chunks display</li>
+      </ul>
+    </div>
+    <div class="compare-cell c-compare-2">
+      <div class="ctitle">📊 Metrics Dashboard</div>
+      <ul class="clist">
+        <li>Context Precision & Recall (RAGAS)</li>
+        <li>MRR & Precision@K scores</li>
+        <li>Side-by-side chunk comparison</li>
+        <li>Reranker score visualization</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="section-divider" style="margin-top:14px;"><span>Tech Stack</span></div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#3B82F6;"></div> LangChain / LangGraph</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#F97316;"></div> Pinecone Vector DB</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#0D9488;"></div> HuggingFace Embeddings</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#7C3AED;"></div> Groq LLM</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#16A34A;"></div> TypeSafe AI Jev Reranker</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#64748B;"></div> RAGAS Evaluation</div>
+  </div>
+
+</div>
+</body>
+</html>
