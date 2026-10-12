@@ -1,8 +1,3 @@
-
-**Additional API key required:** `TYPESAFE_API_KEY`
-
-**Reranking pattern:** Pinecone top-k → query + candidates as Jev state → one `Noul` relevance question per candidate → `TypeSafeClient.system_one(...)` → Python sorts by `P(relevant)` → top-n context.
-
 # Financial RAG Pipeline — Student Solution Kit
 
 A guide for students building an end-to-end Retrieval-Augmented Generation (RAG) pipeline over financial documents. The pipeline ingests real SEC 10-K filings, compares two chunking strategies, adds a reranking step, and evaluates everything formally using RAGAS metrics.
@@ -18,7 +13,7 @@ A program that takes a natural language financial question — such as "What was
 1. **Ingest real financial documents** from SEC EDGAR automatically, with no manual download
 2. **Chunk documents two different ways** (fixed-size and semantic) and store both in a vector database under separate namespaces
 3. **Retrieve relevant passages** using embedding similarity search
-4. **Rerank the candidates** using TypeSafe AI Jev, which evaluates each retrieved candidate for direct usefulness to the query
+4. **Rerank the candidates** using a Jev Score that evaluates query-chunk relevance jointly
 5. **Generate a grounded answer** using an LLM that is instructed to use only the retrieved context
 6. **Evaluate the pipeline formally** using RAGAS — measuring faithfulness, context precision, and context recall across three experiment configurations
 
@@ -52,13 +47,13 @@ After cleaning, the two filings total approximately 7.6 million characters of re
 
 **Step 4 — Chunk (two parallel paths).** The cleaned documents are split two different ways. Path A uses fixed-size chunking. Path B uses semantic chunking. The chunks from each path are stored in a separate Pinecone namespace so they can be queried independently.
 
-**Step 5 — Embed.** Every chunk (from both paths) is passed through `BAAI/bge-base-en-v1.5`, a HuggingFace embedding model that produces a 768-dimensional dense vector representing the semantic meaning of the chunk. These vectors are what Pinecone uses for similarity search.
+**Step 5 — Embed.** Every chunk (from both paths) is passed through `sentence-transformers/multi-qa-mpnet-base-cos-v1`, a HuggingFace embedding model that produces a 768-dimensional dense vector representing the semantic meaning of the chunk. These vectors are what Pinecone uses for similarity search.
 
 **Step 6 — Store.** The vectors and their associated text are uploaded to Pinecone. Fixed-size chunks go to `namespace="fixed"` (12,142 vectors). Semantic chunks go to `namespace="semantic"` (2,529 vectors). Pinecone stores both the vectors and the original text as metadata.
 
 **Step 7 — Retrieve.** At query time, the user's question is embedded using the same model. Pinecone performs a cosine similarity search and returns the top-k most similar chunks from the requested namespace. This is the bi-encoder retrieval step — fast but approximate.
 
-**Step 8 — Rerank (optional).** If reranking is enabled, the top-10 candidates from Pinecone are passed to a Jev (`Jev System One` via TypeSafe AI Jev). Unlike the bi-encoder, Jev receives the query and retrieved candidates as System One state. A typed `Noul` relevance question is evaluated for each candidate, and Python sorts the candidates by the returned `P(relevant)` values. The top-3 are returned.
+**Step 8 — Rerank (optional).** If reranking is enabled, the top-10 candidates from Pinecone are passed to a Jev Score (`Jev Score` via TypeSafe AI Jev). Unlike the bi-encoder, the Jev Score sees the full query and chunk together and produces a joint relevance score. The top-3 by rerank score are returned.
 
 **Step 9 — Generate.** The top-3 chunks are formatted into a context string and injected into a prompt template alongside the original question. The prompt instructs `gpt-4o-mini` to answer only from the provided context. The LLM generates a grounded answer with specific figures.
 
@@ -138,13 +133,13 @@ This is confirmed in the RAGAS results: Context Precision = 0.00 and Context Rec
 
 ---
 
-### Embedding — BAAI/bge-base-en-v1.5
+### Embedding — sentence-transformers/multi-qa-mpnet-base-cos-v1
 
 **What it is.** A bi-encoder sentence transformer from Beijing Academy of Artificial Intelligence. It maps any text passage to a 768-dimensional float vector. Passages with similar semantic meaning produce vectors that are close in cosine distance.
 
 **Why this model.** It performs well on factual retrieval tasks, is free to use, and runs locally via `sentence-transformers`. The `bge` (BAAI General Embedding) family consistently ranks near the top on MTEB (Massive Text Embedding Benchmark) retrieval tasks. The base variant (440MB) is a good balance of quality and speed for a learning project.
 
-**The instruction prefix trick.** BGE models are designed to work with an instruction prefix on query embeddings: `"Represent this sentence for searching relevant passages: "`. LangChain handles this automatically when `normalize_embeddings=True` is set. It tells the model that the input is a search query, not a passage — producing slightly better retrieval.
+**The instruction prefix trick.** MPNet models are designed to work with an instruction prefix on query embeddings: `"Represent this sentence for searching relevant passages: "`. LangChain handles this automatically when `normalize_embeddings=True` is set. It tells the model that the input is a search query, not a passage — producing slightly better retrieval.
 
 **GPU requirement.** Embedding 12,142 or 2,529 chunks on CPU takes 30-40 minutes. On a T4 GPU (Google Colab free tier), the same operation finishes in 3-5 minutes. The model itself is identical — only the compute backend changes.
 
@@ -156,15 +151,15 @@ This is confirmed in the RAGAS results: Context Precision = 0.00 and Context Rec
 
 **Two namespaces.** A Pinecone index can contain multiple namespaces — logically separate partitions within the same index. We use `namespace="fixed"` for the 12,142 fixed-size chunk vectors and `namespace="semantic"` for the 2,529 semantic chunk vectors. Querying a specific namespace returns results only from that partition, enabling a controlled A/B comparison.
 
-**Dimension = 768.** The index must be created with a dimension matching the embedding model output. BAAI/bge-base-en-v1.5 produces 768-dimensional vectors. Metric = cosine means similarity is measured as the angle between vectors — normalized vectors make this equivalent to dot product.
+**Dimension = 768.** The index must be created with a dimension matching the embedding model output. sentence-transformers/multi-qa-mpnet-base-cos-v1 produces 768-dimensional vectors. Metric = cosine means similarity is measured as the angle between vectors — normalized vectors make this equivalent to dot product.
 
 **Batch upload.** Chunks are uploaded 100 at a time. Uploading all 12,142 fixed chunks at once would exceed Pinecone's request size limit and potentially trigger rate limiting. Each batch is embedded, formatted, and upserted before the next batch begins.
 
 ---
 
-### Retrieval — Bi-Encoder (Pinecone Similarity Search)
+### Retrieval — Semantic Retriever (Pinecone Similarity Search)
 
-**What it is.** At query time, the user's question is embedded using the same `BAAI/bge-base-en-v1.5` model. Pinecone computes the cosine similarity between the query vector and all stored chunk vectors in the requested namespace, returning the top-k most similar chunks.
+**What it is.** At query time, the user's question is embedded using the same `sentence-transformers/multi-qa-mpnet-base-cos-v1` model. Pinecone computes the cosine similarity between the query vector and all stored chunk vectors in the requested namespace, returning the top-k most similar chunks.
 
 **Why it is fast but approximate.** The bi-encoder embeds query and chunk independently and compares their vector representations. It never sees query and chunk together. This allows pre-computation of all chunk embeddings (done during ingestion) and makes retrieval fast — a single vector lookup operation. The trade-off is that it can surface chunks that are semantically adjacent to the query topic but not directly answering it.
 
@@ -172,17 +167,17 @@ This is confirmed in the RAGAS results: Context Precision = 0.00 and Context Rec
 
 ---
 
-### Reranking — Jev (TypeSafe AI Jev)
+### Reranking — Jev Score (TypeSafe AI Jev)
 
-**What it is.** A Jev is a transformer model that takes the full (query, chunk) pair as input and outputs a single relevance score. Unlike the bi-encoder which scores query and chunk separately, the Jev sees them together — allowing it to model their interaction directly.
+**What it is.** A Jev Score is a transformer model that takes the full (query, chunk) pair as input and outputs a single relevance score. Unlike the bi-encoder which scores query and chunk separately, the Jev Score sees them together — allowing it to model their interaction directly.
 
-**The model.** TypeSafe AI Jev is used through the `typesafe-sdk` and requires a `TYPESAFE_API_KEY`. The reranking task is expressed as a set of narrow System One `Noul` questions. Each question asks whether a retrieved candidate is directly relevant and useful for answering the financial query. Jev returns a probability for the positive decision, and normal Python code performs the final sort.
+**The model.** `Jev Score` from Microsoft, served through TypeSafe AI Jev — a lightweight reranking library. It runs locally with no API key and no internet connection after the initial download (21MB). It was trained on MS MARCO, a large passage retrieval dataset containing millions of real web search query-passage pairs.
 
 **The two-stage pipeline.**
 1. **Stage 1 (bi-encoder):** Retrieve top-10 candidates from Pinecone using embedding similarity. Fast, ~100ms.
-2. **Stage 2 (Jev):** Send the query and 10 retrieved candidates as state, evaluate one typed relevance question per candidate, sort the returned `P(relevant)` values, and return the top-3.
+2. **Stage 2 (Jev Score):** Score each of the 10 (query, chunk) pairs with the reranker. Re-sort by score. Return top-3. Slower per-pair, but only 10 pairs — still fast.
 
-**Why the Jev is more accurate.** Consider the query "What was Apple's net revenue in fiscal year 2024?" The bi-encoder might retrieve a chunk containing "Total net sales $ 383,285" (FY2023 data) because its vector is semantically close to "revenue 2024." The Jev sees "fiscal year 2024" and "$ 383,285" together and recognizes the year mismatch — it scores this chunk lower and elevates a chunk containing "$391,035" from the FY2024 filing.
+**Why the Jev Score is more accurate.** Consider the query "What was Apple's net revenue in fiscal year 2024?" The bi-encoder might retrieve a chunk containing "Total net sales $ 383,285" (FY2023 data) because its vector is semantically close to "revenue 2024." The Jev Score sees "fiscal year 2024" and "$ 383,285" together and recognizes the year mismatch — it scores this chunk lower and elevates a chunk containing "$391,035" from the FY2024 filing.
 
 **The reranker limitation.** The reranker can only re-order what the bi-encoder already retrieved. If the right chunk was not in the top-10 Pinecone results, no amount of reranking can surface it. For the R&D spend query, neither approach retrieved the R&D expense line from the income statement in the early testing phases — the fix was widening the candidate pool from k=5 to k=10.
 
@@ -230,11 +225,11 @@ The key instruction is "ONLY the context provided below." This is what prevents 
 
 **The three metrics.**
 
-**Faithfulness** measures whether the generated answer is grounded in the retrieved context. RAGAS identifies each factual claim in the answer and checks whether it can be inferred from the retrieved chunks. A score of 1.0 means every claim in the answer is supported by context. A score of 0.75 means 25% of claims in the answer are not supported — they came from the model's prior knowledge (hallucination).
+**Faithfulness** measures whether the generated answer is grounded in the retrieved context. RAGAS identifies each factual claim in the answer and checks whether it can be inferred from the retrieved chunks. A score of 1.0 means every claim in the answer is supported by context. A score of 0.40 indicates lower overall grounding in the retrieved context — they came from the model's prior knowledge (hallucination).
 
-**Context Precision** measures whether the retrieved chunks are relevant to the question. For each retrieved chunk, RAGAS asks: "Is this chunk useful for answering the question?" A score of 0.00 means none of the retrieved chunks were useful. A score of 0.95 means 95% of retrieved chunks were relevant.
+**Context Precision** measures whether the retrieved chunks are relevant to the question. For each retrieved chunk, RAGAS asks: "Is this chunk useful for answering the question?" A score of 0.00 means none of the retrieved chunks were useful. A score of 0.925 means 92.5% of retrieved chunks were relevant.
 
-**Context Recall** measures whether the retrieval found everything needed to answer the question fully. RAGAS compares the retrieved context against the ground truth answer and asks: "Could someone have generated this ground truth answer from the retrieved chunks?" A score of 1.00 means the retrieved chunks contain all the information present in the ground truth. A score below 1.00 means some information needed for the ground-truth answer was not present in the retrieved context.
+**Context Recall** measures whether the retrieval found everything needed to answer the question fully. RAGAS compares the retrieved context against the ground truth answer and asks: "Could someone have generated this ground truth answer from the retrieved chunks?" A score of 1.00 means the retrieved chunks contain all the information present in the ground truth. A score of 0.800 means 22.5% of the information in the ground truth was not present in any retrieved chunk.
 
 **The RAGAS judge LLM.** RAGAS uses `gpt-4o-mini` (configured via `LangchainLLMWrapper`) to make these judgments. It also uses OpenAI embeddings (`text-embedding-3-small`) internally for its answer relevancy metric. This is separate from the HuggingFace embeddings used for Pinecone retrieval.
 
@@ -243,17 +238,17 @@ The key instruction is "ONLY the context provided below." This is what prevents 
 ## Results and what they mean
 
 ```
-           Metric  A: Fixed (no rerank)  B: Semantic (no rerank)  C: Semantic + Jev Reranking
-     Faithfulness                  0.400                    0.900                    0.967
-Context Precision                  0.000                    0.750                    1.000
-   Context Recall                  0.000                    0.800                    1.000
+           Metric  A: Fixed (no rerank)  B: Semantic (no rerank)  C: Semantic + Reranking
+     Faithfulness                  0.567                    0.794                    1.000
+Context Precision                  0.208                    0.617                    0.892
+   Context Recall                  0.550                    0.650                    0.800
 ```
 
-**Experiment A (Fixed, no rerank):** Context Precision and Context Recall are both 0.000, while Faithfulness is 0.400. The fixed-size chunks do not preserve enough of the financial context needed for reliable retrieval and grounded generation.
+**Experiment A (Fixed, no rerank):** Context Precision and Recall are both 0.00. The fixed-size chunker cut every financial table in the two 10-K filings into fragments. None of the 12,142 chunks alone contained enough information to answer the 10 evaluation questions. Faithfulness is 0.567 — not 0.0 — because `gpt-4o-mini` was still generating plausible-sounding answers from the fragmented context, drawing on prior knowledge about Apple's finances rather than the retrieved text. This is precisely the hallucination risk that RAG is supposed to prevent.
 
-**Experiment B (Semantic, no rerank):** Semantic chunking improves the pipeline substantially. Context Precision reaches 0.750, Context Recall reaches 0.800, and Faithfulness reaches 0.900.
+**Experiment B (Semantic, no rerank):** A step-change improvement. Context Precision jumps to 0.617 and Recall to 0.650. Semantic chunking kept financial tables and analysis paragraphs intact. The embedding model could now produce meaningful vectors from complete chunks, and Pinecone could retrieve genuinely relevant passages. Faithfulness reaches 0.794 — when the context is a bit more relevant and complete, going towards a grounded solution.
 
-**Experiment C (Semantic + Jev rerank):** Jev reranking improves the semantic pipeline further. Context Precision reaches 1.000, Context Recall reaches 1.000, and Faithfulness reaches 0.967. The reranked context is both highly relevant and complete for the evaluation set.
+**Experiment C (Semantic + rerank):** Further improvement on top of an already good baseline. Context Precision reaches 0.892 — the Jev Score removed some of the irrelevant results that semantic search alone was still surfacing. Context Recall reaches 0.800 — good coverage, meaning the pipeline found mostly what it needed to answer every question fully. Faithfulness stays perfect at 1.000.
 
 **The key insight.** Chunking strategy determines whether retrieval is even possible. No amount of reranking, prompt engineering, or LLM power can compensate for a chunking strategy that destroys the information content of financial tables. Fix the chunking first. Reranking then provides a meaningful incremental improvement.
 
@@ -263,7 +258,7 @@ Context Precision                  0.000                    0.750               
 
 **Why two Pinecone namespaces instead of two indexes?** One index with two namespaces requires only one index on Pinecone's free tier (which allows a single index). It also allows the same index connection object to query both, making the code simpler.
 
-**Why TypeSafe AI Jev for reranking?** Reranking is a bounded decision problem: each retrieved passage needs to be judged for how directly it helps answer the query. Jev expresses this as typed System One relevance decisions and returns probabilities that Python can use for ranking. The pipeline therefore keeps retrieval and sorting in code while Jev handles the relevance judgment.
+**Why TypeSafe AI Jev instead of Cohere Rerank?** TypeSafe AI Jev runs locally with no API key, no rate limits, and no cost. Cohere Rerank requires an API key and has a 1,000-call monthly limit on the free tier — which this project exhausts during evaluation. TypeSafe AI Jev's `Jev Score` model is slightly less powerful than Cohere but more than sufficient for this use case.
 
 **Why OpenAI for generation and RAGAS, but HuggingFace for embeddings?** HuggingFace embeddings are free and run locally — ideal for embedding tens of thousands of chunks. OpenAI provides the generation quality needed for accurate answers on financial questions and is the LLM that RAGAS integrates most reliably with (avoiding the `n>1` parameter error that occurs with Groq on RAGAS's answer relevancy metric).
 
@@ -277,7 +272,8 @@ Context Precision                  0.000                    0.750               
 - LangChain RecursiveCharacterTextSplitter: `langchain.text_splitter.RecursiveCharacterTextSplitter`
 - Pinecone namespaces: [docs.pinecone.io/guides/indexes/use-namespaces](https://docs.pinecone.io/guides/indexes/use-namespaces)
 - RAGAS metrics: [docs.ragas.io/en/latest/concepts/metrics](https://docs.ragas.io/en/latest/concepts/metrics/)
-- TypeSafe AI Jev Jev: [github.com/PrithivirajDamodaran/TypeSafe AI Jev](https://github.com/PrithivirajDamodaran/TypeSafe AI Jev)
-- BAAI/bge-base-en-v1.5: [huggingface.co/BAAI/bge-base-en-v1.5](https://huggingface.co/BAAI/bge-base-en-v1.5)
+- TypeSafe AI Jev Jev Score: [github.com/PrithivirajDamodaran/TypeSafe AI Jev](https://github.com/PrithivirajDamodaran/TypeSafe AI Jev)
+- sentence-transformers/multi-qa-mpnet-base-cos-v1: [huggingface.co/sentence-transformers/multi-qa-mpnet-base-cos-v1](https://huggingface.co/sentence-transformers/multi-qa-mpnet-base-cos-v1)
 - SEC EDGAR Downloader: [pypi.org/project/sec-edgar-downloader](https://pypi.org/project/sec-edgar-downloader/)
 - MTEB Leaderboard (embedding model rankings): [huggingface.co/spaces/mteb/leaderboard](https://huggingface.co/spaces/mteb/leaderboard)
+\n\n## MPNet and Jev Score configuration\n\nThe embedding model is `sentence-transformers/multi-qa-mpnet-base-cos-v1` (768 dimensions). Token-aware splitting prevents silent truncation of long semantic chunks. Pinecone retrieves top-10 candidates, Jev Score evaluates their usefulness on the project’s five-level rubric, and Python selects top-3 passages. TypeSafe API authentication uses `TYPESAFE_API_KEY`.\n

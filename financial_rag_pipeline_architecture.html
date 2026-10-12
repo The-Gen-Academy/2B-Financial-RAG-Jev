@@ -273,8 +273,8 @@
   <div class="row">
     <div class="node c-teal node-wide">
       <div class="node-icon">🤗</div>
-      <div class="node-title">HuggingFace Embeddings — BAAI/bge-large-en-v1.5</div>
-      <div class="node-sub">768-dim dense vectors · finance-aware · free · runs locally via sentence-transformers</div>
+      <div class="node-title">HuggingFace Embeddings — multi-qa-mpnet-base-cos-v1</div>
+      <div class="node-sub">768-dim dense vectors · free · runs locally via sentence-transformers</div>
     </div>
   </div>
 
@@ -285,12 +285,12 @@
   <div class="eval-row">
     <div class="eval-box c-eval-a">
       <div class="etitle">Fixed-Size Results</div>
-      <div class="esub">20 test queries → top-5 retrieval from Pinecone "fixed" → score with RAGAS (context precision, recall)</div>
+      <div class="esub">10 evaluation questions → top-3 retrieval from Pinecone "fixed" → score with RAGAS (context precision, recall)</div>
     </div>
     <div class="c-eval-vs">VS</div>
     <div class="eval-box c-eval-b">
       <div class="etitle">Semantic Results</div>
-      <div class="esub">Same 20 queries → top-5 from "semantic" → RAGAS scores + MRR comparison</div>
+      <div class="esub">Same 10 questions → top-3 from "semantic" → RAGAS evaluation</div>
     </div>
   </div>
   <div style="margin-top:8px;">
@@ -303,18 +303,18 @@
   <div class="arrow">↓</div>
 
   <!-- PHASE 5: RERANKING -->
-  <div class="phase-label">⑤ Reranking Step — Applied to Winning Chunking Strategy</div>
+  <div class="phase-label">⑤ Jev Score Reranking — Semantic Retrieval</div>
   <div class="row">
     <div class="node c-gray" style="max-width:200px;">
       <div class="node-icon">🔍</div>
       <div class="node-title">Query → Pinecone</div>
-      <div class="node-sub">Retrieve top-20 candidates (wider net for reranker to work with)</div>
+      <div class="node-sub">Retrieve top-10 candidates (wider net for reranker to work with)</div>
     </div>
     <div class="arrow" style="height:auto; align-items:center;">→</div>
     <div class="rerank-box" style="flex:1;">
       <div class="rerank-inner">
         <div class="rerank-title">🔁 TypeSafe AI Jev Reranker</div>
-        <div class="rerank-sub">Jev System One via TypeSafe AI API<br>Typed relevance decisions for retrieved candidates · Python sorts by P(relevant) · returns top candidates</div>
+        <div class="rerank-sub">Jev System One via TypeSafe AI API<br>Jev Score grades answer usefulness for each candidate · Python sorts by score · returns top-3</div>
       </div>
       <div class="rerank-badge">SYSTEM ONE · API</div>
     </div>
@@ -378,7 +378,7 @@
   <div class="legend">
     <div class="legend-item"><div class="legend-dot" style="background:#3B82F6;"></div> LangChain / LangGraph</div>
     <div class="legend-item"><div class="legend-dot" style="background:#F97316;"></div> Pinecone Vector DB</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#0D9488;"></div> HuggingFace Embeddings</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#0D9488;"></div> MPNet Embeddings</div>
     <div class="legend-item"><div class="legend-dot" style="background:#7C3AED;"></div> Groq LLM</div>
     <div class="legend-item"><div class="legend-dot" style="background:#16A34A;"></div> TypeSafe AI Jev Reranker</div>
     <div class="legend-item"><div class="legend-dot" style="background:#64748B;"></div> RAGAS Evaluation</div>
